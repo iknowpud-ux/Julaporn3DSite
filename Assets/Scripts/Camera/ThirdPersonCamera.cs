@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class ThirdPersonCamera : MonoBehaviour
 {
@@ -12,11 +11,11 @@ public class ThirdPersonCamera : MonoBehaviour
     [Tooltip("ความสูงที่กล้องลอยเหนือ Player")]
     [SerializeField] private float height = 2f;
 
-    [Tooltip("ความไวหมุนซ้าย-ขวา (Input System ส่งค่า pixel/frame — เล็กกว่า Legacy ~10x)")]
-    [SerializeField] private float sensitivityX = 0.15f;
+    [Tooltip("ความไวหมุนซ้าย-ขวา")]
+    [SerializeField] private float sensitivityX = 3f;
 
     [Tooltip("ความไวหมุนบน-ล่าง")]
-    [SerializeField] private float sensitivityY = 0.15f;
+    [SerializeField] private float sensitivityY = 2f;
 
     [Tooltip("มุมก้มต่ำสุด (องศา)")]
     [SerializeField] private float minPitch = -20f;
@@ -26,42 +25,65 @@ public class ThirdPersonCamera : MonoBehaviour
 
     private float _yaw;
     private float _pitch;
+    private bool _isLocked;
 
-    private void Start()
+    private void Update()
     {
-        // WebGL: cursor lock ต้องเรียกหลัง user gesture — canvas click คือ trigger
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible   = false;
+        HandleCursorLock();
     }
 
     private void LateUpdate()
     {
         if (target == null) return;
 
-        RotateByMouse();
+        if (_isLocked)
+            RotateByMouse();
+
         FollowTarget();
+    }
+
+    private void HandleCursorLock()
+    {
+        // WebGL ต้องการ user gesture ก่อนถึงจะ lock cursor ได้ — click คือ gesture นั้น
+        if (!_isLocked && Input.GetMouseButtonDown(0))
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible   = false;
+            _isLocked        = true;
+        }
+
+        // ESC ปลด lock เพื่อให้ user กลับมาใช้ cursor ปกติได้
+        if (_isLocked && Input.GetKeyDown(KeyCode.Escape))
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible   = true;
+            _isLocked        = false;
+        }
     }
 
     private void RotateByMouse()
     {
-        var mouse = Mouse.current;
-        if (mouse == null) return;
-
-        // delta.ReadValue() คืน pixel/frame — ใหญ่กว่า GetAxis("Mouse X") มาก ต้องใช้ sensitivity ต่ำกว่าเดิม
-        Vector2 delta = mouse.delta.ReadValue();
-        _yaw   += delta.x * sensitivityX;
-        _pitch -= delta.y * sensitivityY;
+        _yaw   += Input.GetAxis("Mouse X") * sensitivityX;
+        _pitch -= Input.GetAxis("Mouse Y") * sensitivityY;
         _pitch  = Mathf.Clamp(_pitch, minPitch, maxPitch);
     }
 
     private void FollowTarget()
     {
-        // Spherical coordinate รอบ target — ง่ายกว่า lerp และไม่มี gimbal lock
+        // Spherical coordinate รอบ target — ป้องกัน gimbal lock
         Quaternion rot    = Quaternion.Euler(_pitch, _yaw, 0f);
         Vector3    offset = rot * new Vector3(0f, height, -distance);
 
         transform.position = target.position + offset;
-        // LookAt จุดกึ่งกลาง body แทน pivot เพื่อให้กล้องดูเป็นธรรมชาติ
         transform.LookAt(target.position + Vector3.up * (height * 0.5f));
     }
+
+#if UNITY_EDITOR
+    private void OnDrawGizmosSelected()
+    {
+        if (target == null) return;
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawLine(transform.position, target.position);
+    }
+#endif
 }
