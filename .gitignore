@@ -1,8 +1,8 @@
 # Claude Code local config
 .claude/
 
-# WebGL build output
-/WebBuild/
+# WebGL build output — เปิดไว้เพื่อ deploy บน Vercel
+# /WebBuild/
 
 # Coplay MCP (local dev tool)
 /Packages/Coplay/
@@ -23,8 +23,8 @@
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
-/[Bb]uild/
-/[Bb]uilds/
+# /[Bb]uild/
+# /[Bb]uilds/
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 *.log
