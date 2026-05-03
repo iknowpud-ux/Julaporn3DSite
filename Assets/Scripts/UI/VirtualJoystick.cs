@@ -1,18 +1,17 @@
 using UnityEngine;
 
-// [Single Responsibility] แค่ show/hide joystick root ตาม device type
-// ไม่รู้จัก input หรือ physics
+/// <summary>
+/// Show/hide joystick root ตาม device type เท่านั้น
+/// การรับ input จริงทำโดย OnScreenStick (Input System) บน Handle child
+/// </summary>
 public class VirtualJoystick : MonoBehaviour
 {
-    [Tooltip("Root GameObject ของ joystick UI — ซ่อนบน desktop, แสดงบน touch device")]
+    [Tooltip("JoystickRoot GameObject — แสดงบน touch device, ซ่อนบน desktop")]
     [SerializeField] private GameObject joystickRoot;
 
     private void Awake()
     {
         if (joystickRoot == null) return;
-
-        // Input.touchSupported ทำงานถูกต้องบน WebGL — browser report ผ่าน pointer events
-        bool isMobile = Input.touchSupported || SystemInfo.deviceType == DeviceType.Handheld;
-        joystickRoot.SetActive(isMobile);
+        joystickRoot.SetActive(Input.touchSupported);
     }
 }

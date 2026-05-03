@@ -12,7 +12,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float groundCheckDistance = 0.6f;
 
     private Rigidbody _rb;
-    private Vector2  _moveInput;
+    private Vector2   _moveInput;
 
     private void Awake()
     {
@@ -20,8 +20,7 @@ public class PlayerController : MonoBehaviour
         _rb.constraints = RigidbodyConstraints.FreezeRotation;
     }
 
-    // PlayerInput (Send Messages) เรียก callback นี้เมื่อ Move action เปลี่ยนค่า
-    // รองรับทั้ง WASD, Gamepad leftStick, และ OnScreenStick (mobile)
+    // PlayerInput (Send Messages) — รับจาก WASD, Gamepad, และ OnScreenStick (mobile)
     private void OnMove(InputValue value)
     {
         _moveInput = value.Get<Vector2>();
@@ -34,16 +33,16 @@ public class PlayerController : MonoBehaviour
 
     private void Move()
     {
-        if (_moveInput == Vector2.zero)
+        if (_moveInput.sqrMagnitude < 0.01f)
         {
             _rb.linearVelocity = new Vector3(0f, _rb.linearVelocity.y, 0f);
             return;
         }
 
-        // อิงทิศกล้อง ให้ W/joystick-up = วิ่งตามที่กล้องมองเสมอ
-        Transform cam = Camera.main ? Camera.main.transform : null;
-        Vector3 forward = cam ? cam.forward : Vector3.forward;
-        Vector3 right   = cam ? cam.right   : Vector3.right;
+        // อิงทิศกล้องเสมอ — W/joystick-up = วิ่งตามที่กล้องมอง
+        Transform cam     = Camera.main ? Camera.main.transform : null;
+        Vector3   forward = cam ? cam.forward : Vector3.forward;
+        Vector3   right   = cam ? cam.right   : Vector3.right;
         forward.y = 0f;
         right.y   = 0f;
         forward.Normalize();
