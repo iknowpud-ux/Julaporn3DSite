@@ -35,11 +35,35 @@
 ```
 Julaporn3DSite/
 ├── Assets/
-│   ├── Scenes/MainScene.unity
+│   ├── MainScene.unity                  ← active scene (root, ไม่ใช่ Scenes/)
 │   ├── Scripts/
-│   │   ├── Player/PlayerController.cs
-│   │   └── Camera/ThirdPersonCamera.cs
-│   └── Settings/          ← URP configs
+│   │   ├── Player/                      ← split ตาม SRP
+│   │   │   ├── PlayerInputReader.cs     ← อ่าน input (WASD/Gamepad/On-Screen Stick)
+│   │   │   ├── GroundChecker.cs         ← Raycast ตรวจพื้น (IsGrounded)
+│   │   │   ├── PlayerLocomotion.cs      ← Rigidbody movement (read cam.Yaw runtime)
+│   │   │   └── PlayerController.cs      ← Auto-migration shim (Awake → add 3 components)
+│   │   ├── Camera/CameraController.cs   ← Iso/TP presets + ToggleView + mouse look
+│   │   └── UI/
+│   │       ├── VirtualJoystick.cs       ← Show/hide ตาม device (force show ใน Editor)
+│   │       └── CameraViewSwitcher.cs    ← UI button toggle Iso ↔ TP
+│   ├── Editor/                          ← Editor tools (MenuItem + static helpers)
+│   │   ├── PlayerSetup.cs               ← Tools→Julaporn→Refactor Player To SRP / Setup Joystick
+│   │   ├── JoystickSetup.cs             ← Canvas + Joystick + SwitchView Button + EventSystem
+│   │   ├── WebGLBuilder.cs              ← build → WebBuild/ (compression Disabled)
+│   │   ├── ApplyDarkCityMaterials.cs
+│   │   ├── ApplyNightSky.cs
+│   │   ├── ImportGLB.cs
+│   │   └── PlaceJulaporn.cs
+│   ├── Materials/                       ← URP Lit materials
+│   │   ├── Mat_Buildings.mat
+│   │   ├── Mat_Forest.mat
+│   │   ├── Mat_Ground.mat
+│   │   ├── Mat_MainBuilding.mat
+│   │   ├── Mat_NightSky.mat
+│   │   ├── Mat_Roads.mat
+│   │   └── Mat_Water.mat
+│   ├── julaporn.glb                     ← 3D character/model asset (~1.2 MB)
+│   └── Settings/                        ← URP configs
 ├── Packages/              ← Coplay, URP, Input System
 ├── ProjectSettings/
 ├── WebBuild/              ← committed for Vercel deploy
@@ -55,12 +79,19 @@ Julaporn3DSite/
 
 | Setting | Value |
 |---------|-------|
-| **Player** | Sphere + Rigidbody (freeze rotation X, Z) |
-| **Movement** | WASD, speed = 5 |
-| **Jump** | Space, force = 7 |
-| **Camera** | Third-person, offset (behind 5, up 2) |
-| **Mouse Look** | Mouse X/Y rotation |
-| **Environment** | Plane 50×50, 10 random Cubes (height 5–15) |
+| **Player** | Sphere + Rigidbody (FreezeRotation ทุกแกน, Interpolate) |
+| **Movement** | WASD + Virtual Joystick (mobile), speed = 12 |
+| **Movement Direction** | sync จาก `CameraController.Yaw` ทุก FixedUpdate (รองรับ runtime view switch) |
+| **Jump** | Space, force = 7 (ยังไม่ implement) |
+| **Camera Modes** | 2 view สลับด้วยปุ่ม UI: Iso 2.5D ↔ Third Person |
+| **Iso 2.5D View** | Perspective fake-iso (FOV 35°, distance 120, pitch 65°, yaw 225°, lookAt offset 25) |
+| **TP View** | Perspective (FOV 50°, distance 8, pitch 20°, yaw 0°, lookAt offset 1.5) |
+| **TP Mouse Look** | Right-click + drag → yaw + pitch (clamp -10° ... 70°) |
+| **Camera Common** | nearClip 0.05, farClip 5000, followSmoothness 8–12 |
+| **View Switch UI** | ปุ่มมุมขวาบน "🎮 2.5D" / "👤 3rd" — `CameraViewSwitcher.cs` บน Canvas |
+| **EventSystem** | `InputSystemUIInputModule` (ไม่ใช่ legacy StandaloneInputModule) |
+| **Cursor Lock** | ไม่ใช้ (ไม่ต้อง click ก่อน) |
+| **Environment** | `julaporn.glb` mesh เมืองจริง — bounds 1330×57×712 units, ตึกสูงสุด 57 |
 
 ---
 
@@ -107,7 +138,17 @@ GetComponent() in Update // cache ไว้ใน Awake/Start แทน
 | ✅ Fixed | Unity 6.4 = Shader Graph `BuiltInCanvasSubTarget` bug | ใช้ Unity 6.3 LTS |
 | ✅ Fixed | Input Handling = New only → `InvalidOperationException` | ตั้งเป็น Both |
 | ✅ Fixed | Brotli `.br` files ไม่โหลด | `vercel.json` + Content-Encoding headers |
-| ⚠️ Open | Pointer Lock ทำให้ต้องคลิกก่อนเล่น | อยู่ใน Roadmap |
+| ✅ Fixed | Pointer Lock ทำให้ต้องคลิกก่อนเล่น | เปลี่ยน camera ไม่ใช้ cursor lock |
+| ✅ Fixed | ThirdPersonCamera หมุนตามเมาส์ไม่พึงประสงค์ | เปลี่ยนเป็น CameraController (locked isometric) |
+| ✅ Fixed | WASD กระตุก/เหวี่ยง — feedback loop ระหว่าง camera follow lag กับ camera-relative input | `PlayerLocomotion` ใช้ yaw-fixed (225°) แปลง input → world direction (ไม่อิง `Camera.main` runtime) |
+| ✅ Fixed | กล้องสั่นเล็กน้อยตอนเดิน — `LookAt` + `SmoothDamp` แย่งกัน 2 motion source | `CameraController` set rotation ครั้งเดียวที่ Awake — เลิกใช้ `LookAt` ทุก frame |
+| ✅ Fixed | มุมกล้องต่ำ ไม่เห็นเป็น 2.5D ชัดเจน | pitch 50→60°, distance 12→36, projection = Orthographic (true isometric) |
+| ✅ Fixed | `PlayerController` รวมหลายหน้าที่ในที่เดียว ผิด SRP | split: `PlayerInputReader` + `GroundChecker` + `PlayerLocomotion` |
+| ✅ Fixed | UI button + joystick กดไม่ได้ — Scene ขาด `EventSystem` | `JoystickSetup.EnsureEventSystem()` สร้าง EventSystem + `InputSystemUIInputModule` (ไม่ใช่ legacy `StandaloneInputModule`) |
+| ✅ Fixed | ตึกสูง 57 units ถูก slice ในมุม Iso orthographic — frustum vertical ±18 ครอบไม่ถึง | switch Iso เป็น **Perspective fake-iso** (FOV 35°, distance 120) — render เหมือน TP ไม่มี hard frustum cap |
+| ✅ Fixed | สีตึกใน Iso ortho ต่างจาก TP — HDR/post-FX/tonemap คำนวณต่างกัน | ใช้ Perspective ทั้ง 2 view → share rendering pipeline เดียวกัน |
+| ✅ Fixed | ตอนสลับเป็น TP กล้องลอยสูง — `lookAtHeightOffset` ใช้ค่าเดียวทั้ง 2 view | แยกเป็น `isoLookAtOffset` (25) + `tpLookAtOffset` (1.5) |
+| ✅ Fixed | TP ไม่มี mouse look | เพิ่ม `HandleMouseLook()` — right-click + drag (ไม่ทับ joystick) |
 | ℹ️ Ignore | Coplay toolbar warning | ไม่กระทบ ปล่อยไว้ได้ |
 
 ---
@@ -192,9 +233,18 @@ GetComponent() in Update // cache ไว้ใน Awake/Start แทน
 - [x] 3D scene พื้นฐาน + Player + Camera
 - [x] Build WebGL + Deploy on Vercel
 - [x] Virtual Joystick สำหรับ mobile
+- [x] Locked isometric CameraController (ไม่ต้อง cursor lock)
+- [x] Materials สำหรับ Buildings, Ground, Forest, Roads, Water, NightSky
+- [x] julaporn.glb 3D asset + Editor tools (PlaceJulaporn, ImportGLB, ApplyDarkCityMaterials)
+- [x] Refactor Player ตาม SRP — PlayerInputReader / GroundChecker / PlayerLocomotion
+- [x] Fix WASD jitter — yaw-fixed input direction (ตัด feedback loop กับ camera follow)
+- [x] Camera 2 view + UI toggle button (Iso 2.5D ↔ TP) + right-click mouse look ใน TP
+- [x] Perspective fake-iso (FOV 35°) — สีตรงกับ TP, ตึกสูงไม่โดน slice
+- [x] EventSystem + InputSystemUIInputModule (UI button + joystick ทำงาน)
+- [x] WebGL builder script (Tools→Julaporn→Build WebGL)
 - [ ] Auto-play (ไม่ต้องคลิกก่อน)
 - [ ] Custom domain
-- [ ] Real portfolio content
+- [ ] Real portfolio content (วาง julaporn.glb ใน scene จริง)
 - [ ] Loading screen
 - [ ] Background music
 

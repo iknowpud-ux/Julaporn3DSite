@@ -1,8 +1,10 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.OnScreen;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
 
 public class JoystickSetup
@@ -10,9 +12,34 @@ public class JoystickSetup
     public static void Execute()
     {
         SetupPlayerInput();
+        EnsureEventSystem();
         CreateJoystickUI();
         EditorSceneManager.SaveOpenScenes();
-        Debug.Log("[JoystickSetup] Done — save scene + PlayerInput + Canvas สำเร็จ");
+        Debug.Log("[JoystickSetup] Done — PlayerInput + EventSystem + Canvas + SwitchView Button สำเร็จ");
+    }
+
+    static void EnsureEventSystem()
+    {
+        // ตรวจหา EventSystem ใน scene — ถ้ามีอยู่แล้วไม่สร้างซ้ำ
+        var existing = Object.FindFirstObjectByType<EventSystem>();
+        if (existing != null)
+        {
+            // ถ้ามี EventSystem แต่ยังใช้ StandaloneInputModule (legacy) → swap เป็น InputSystemUIInputModule
+            var legacy = existing.GetComponent<StandaloneInputModule>();
+            if (legacy != null)
+            {
+                Object.DestroyImmediate(legacy);
+                existing.gameObject.AddComponent<InputSystemUIInputModule>();
+                Debug.Log("[JoystickSetup] Swapped legacy StandaloneInputModule → InputSystemUIInputModule");
+            }
+            return;
+        }
+
+        // ไม่มี → สร้างใหม่
+        var es = new GameObject("EventSystem");
+        es.AddComponent<EventSystem>();
+        es.AddComponent<InputSystemUIInputModule>(); // ใช้ตัวนี้เพราะ project ใช้ Input System (ไม่ใช่ StandaloneInputModule)
+        Debug.Log("[JoystickSetup] + EventSystem (with InputSystemUIInputModule)");
     }
 
     static void SetupPlayerInput()
@@ -54,7 +81,6 @@ public class JoystickSetup
         var vj = canvasGO.AddComponent<VirtualJoystick>();
 
         // --- JoystickRoot (Background) — มุมล่างซ้าย ---
-        // AddComponent<Image> สร้าง RectTransform อัตโนมัติ ต้อง add ก่อนจึงจะ GetComponent ได้
         var rootGO  = new GameObject("JoystickRoot");
         rootGO.transform.SetParent(canvasGO.transform, false);
         var bgImg   = rootGO.AddComponent<Image>();
@@ -78,17 +104,63 @@ public class JoystickSetup
         handleRT.anchoredPosition = Vector2.zero;
         handleRT.sizeDelta        = new Vector2(120f, 120f);
 
-        // OnScreenStick บน Handle — bind กับ <Gamepad>/leftStick
-        // Move action ใน InputSystem_Actions มี binding นี้อยู่แล้ว
         var stick               = handleGO.AddComponent<OnScreenStick>();
         stick.controlPath       = "<Gamepad>/leftStick";
         stick.movementRange     = 60f;
 
-        // ส่ง joystickRoot เข้า VirtualJoystick ผ่าน SerializedObject
         var so = new SerializedObject(vj);
         so.FindProperty("joystickRoot").objectReferenceValue = rootGO;
         so.ApplyModifiedProperties();
 
-        Debug.Log("[JoystickSetup] Canvas + OnScreenStick created (250px bg / 120px handle / 60px range)");
+        // --- Switch View Button — มุมขวาบน ---
+        CreateSwitchViewButton(canvasGO);
+
+        Debug.Log("[JoystickSetup] Canvas + OnScreenStick + SwitchView Button created");
+    }
+
+    static void CreateSwitchViewButton(GameObject canvasGO)
+    {
+        var btnGO  = new GameObject("SwitchViewButton");
+        btnGO.transform.SetParent(canvasGO.transform, false);
+
+        var btnImg = btnGO.AddComponent<Image>();
+        btnImg.color = new Color(0.1f, 0.1f, 0.1f, 0.6f);
+
+        var btnRT              = btnGO.GetComponent<RectTransform>();
+        btnRT.anchorMin        = new Vector2(1f, 1f);
+        btnRT.anchorMax        = new Vector2(1f, 1f);
+        btnRT.pivot            = new Vector2(1f, 1f);
+        btnRT.anchoredPosition = new Vector2(-40f, -40f);
+        btnRT.sizeDelta        = new Vector2(220f, 110f);
+
+        var btn = btnGO.AddComponent<Button>();
+
+        // --- Label child ---
+        var labelGO = new GameObject("Label");
+        labelGO.transform.SetParent(btnGO.transform, false);
+        var label   = labelGO.AddComponent<Text>();
+        label.text  = "🎮 2.5D";
+        label.alignment = TextAnchor.MiddleCenter;
+        label.color     = Color.white;
+        label.fontSize  = 42;
+        label.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        var labelRT       = labelGO.GetComponent<RectTransform>();
+        labelRT.anchorMin = Vector2.zero;
+        labelRT.anchorMax = Vector2.one;
+        labelRT.offsetMin = Vector2.zero;
+        labelRT.offsetMax = Vector2.zero;
+
+        // --- CameraViewSwitcher script ---
+        var switcher = btnGO.AddComponent<CameraViewSwitcher>();
+        var so = new SerializedObject(switcher);
+        so.FindProperty("label").objectReferenceValue = label;
+
+        // ลาก CameraController reference
+        var cam = Object.FindFirstObjectByType<CameraController>();
+        if (cam != null)
+            so.FindProperty("cameraController").objectReferenceValue = cam;
+
+        so.ApplyModifiedProperties();
     }
 }
