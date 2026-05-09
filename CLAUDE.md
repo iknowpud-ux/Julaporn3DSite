@@ -260,3 +260,44 @@ GetComponent() in Update // cache ไว้ใน Awake/Start แทน
 - [ ] Push GitHub
 - [ ] Verify Vercel deploy
 - [ ] Test live URL
+
+---
+
+## 17. 🔧 Editor Script Conventions
+
+> **บังคับ** สำหรับทุก editor script ใน `Assets/Editor/` — เพราะ Unity Coplay MCP รัน script หลายครั้ง ถ้าไม่ idempotent จะเกิด **bug จาก state ค้าง** (duplicate GameObjects, dangling material refs, magenta shader, etc.)
+
+### Rule #1: Idempotent ทุกตัว
+รัน script N ครั้ง → ผลลัพธ์เหมือนรัน 1 ครั้ง
+- ❌ `new GameObject("Foo")` — Unity allow ชื่อซ้ำ → สะสม
+- ✅ `SceneEditorOps.ReplaceGameObject("Foo")` — ลบทุกตัวที่ชื่อซ้ำ + สร้างใหม่
+
+### Rule #2: ใช้ `SceneEditorOps` (ที่ `Assets/Editor/SceneEditorOps.cs`)
+| Method | Use case |
+|--------|----------|
+| `EnsureNotPlayMode()` | ต้นไฟล์ — abort ถ้า play mode (กัน "cannot use during play mode" error) |
+| `ReplaceGameObject(name)` | สร้าง root GO แบบ idempotent |
+| `DeleteAllByName(name)` | ลบ root GO ทุกตัวชื่อนี้ |
+| `EnsureFolder(path)` | สร้าง Asset folder รองรับ nested |
+| `LoadOrCreateMaterial(path, shader)` | material idempotent |
+| `DeleteAssetSafe(path)` | ลบ asset ปลอดภัย |
+| `MarkDirtyAndSave()` | ท้ายไฟล์ — save scene |
+
+### Rule #3: Skeleton ของทุก editor script
+```csharp
+public static void Execute()
+{
+    if (!SceneEditorOps.EnsureNotPlayMode()) return;
+
+    // ... mutate scene/assets ...
+
+    SceneEditorOps.MarkDirtyAndSave();
+    Debug.Log("[ScriptName] ✅ Done");
+}
+```
+
+### Rule #4: ลบ asset → ต้องลบ reference ใน scene ด้วย
+ถ้าลบ `Mat_Foo.mat` ที่ MeshRenderer หลายตัว reference อยู่ → จะ render เป็น **magenta** (Unity fallback) → ตามเก็บลบ MeshRenderer/material ที่ใช้ asset นั้นด้วย
+
+### Rule #5: Verify หลังรัน
+ใช้ `mcp__coplay-mcp__list_game_objects_in_hierarchy` หรือ `get_game_object_info` เช็คผลลัพธ์ ก่อนบอก user ว่าเสร็จ — อย่าเชื่อแค่ "execute_script returned Success"
