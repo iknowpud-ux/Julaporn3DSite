@@ -33,3 +33,50 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 export function icon(svg: string, cls = 'icon'): HTMLSpanElement {
   return el('span', { className: cls, html: svg });
 }
+
+// ============================================================
+// REVEAL DELAY COUNTER — global cursor สำหรับ stagger block-level
+//   ทุก renderer ที่อยาก stagger ระหว่างกัน เรียก nextRevealBase()
+//   จะได้ delay เพิ่มทีละ REVEAL_BLOCK_STEP (default 60ms)
+//   ก่อนเริ่ม render ใหม่ ต้องเรียก resetReveal()
+// ============================================================
+const REVEAL_BLOCK_STEP = 60;
+let _revealCursor = 0;
+
+export function resetReveal(): void { _revealCursor = 0; }
+export function nextRevealBase(step = REVEAL_BLOCK_STEP): number {
+  const d = _revealCursor;
+  _revealCursor += step;
+  return d;
+}
+
+// Split text → <span> ต่อตัวอักษร พร้อม animation-delay แบบ stagger
+// stepMs = ช่องว่าง delay ระหว่าง span (ค่าน้อย = wave เร็ว)
+// baseMs = offset เริ่มต้น (ใช้ stagger ระหว่าง element หลายตัว)
+export function splitChars(text: string, stepMs = 25, baseMs = 0): HTMLSpanElement[] {
+  return [...text].map((c, i) =>
+    el('span', {
+      className: 'reveal-char',
+      style: `--d:${baseMs + i * stepMs}ms`,
+    }, c === ' ' ? ' ' : c)
+  );
+}
+
+// per-word version
+export function splitWords(text: string, stepMs = 70, baseMs = 0): HTMLSpanElement[] {
+  const words = text.split(' ');
+  return words.map((w, i) =>
+    el('span', {
+      className: 'reveal-word',
+      style: `--d:${baseMs + i * stepMs}ms`,
+    }, w + (i < words.length - 1 ? ' ' : ''))
+  );
+}
+
+// reveal whole text เป็น single block (ไม่ split) — ใช้กับ text ยาวที่ไม่อยากให้กระจาย
+export function revealBlock(text: string, baseMs = 0): HTMLSpanElement {
+  return el('span', {
+    className: 'reveal-word',
+    style: `--d:${baseMs}ms`,
+  }, text);
+}

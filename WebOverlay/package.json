@@ -6,7 +6,9 @@
   "scripts": {
     "build": "bun build src/main.ts --target=browser --outdir=dist --minify --sourcemap=external && bun run copy",
     "copy": "bun copy.ts",
-    "dev": "bun build src/main.ts --target=browser --outdir=dist --watch"
+    "dev": "bun build src/main.ts --target=browser --outdir=dist --watch --sourcemap=external",
+    "serve": "bunx serve -p 3001 -L .",
+    "preview": "bun build src/main.ts --target=browser --outdir=dist --sourcemap=external && bunx serve -p 3001 -L ."
   },
   "devDependencies": {
     "typescript": "^5.5.0",

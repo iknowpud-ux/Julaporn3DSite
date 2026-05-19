@@ -106,8 +106,12 @@ Julaporn3DSite/
 | **Fog** | Linear 200..2000 — color `#0D0F14` (Far city haze) |
 | **Skybox** | None — solid bg color `#0D0F14` (เพื่อรองรับ day/night mode runtime swap) |
 | **Reflections** | Off (Custom mode, intensity 0 — ไม่มี skybox ให้สะท้อน) |
+| **Bloom** | Global Volume + Bloom override (threshold 0.9, intensity 0.6, scatter 0.88) — HDR pin emission glow |
+| **Camera Post-FX** | Enabled (`renderPostProcessing = true`) — bloom ทำงานต่อ |
+| **Pin System** | `PinManager` spawn จาก `Assets/Data/Lamps.asset` (LampDataAsset) — 5 Pin GameObject + URP Lit material + emission animate per state |
+| **Splash Screen** | Dark (#060810) + LightOnDark logo + static animation — `ConfigureSplashScreen.cs` |
 | **Environment** | `julaporn.glb` city mesh — bounds **2843×57×3244** units (center -118, 28, -230) |
-| **Materials** | Mat_Buildings (None_buildings) / **Mat_MainBuilding** (building) — แยกแล้ว |
+| **Materials** | Mat_Buildings (None_buildings) / **Mat_MainBuilding** (building) / **Mat_Pin** (URP Lit + emission) |
 
 ---
 
@@ -180,6 +184,11 @@ GetComponent() in Update // cache ไว้ใน Awake/Start แทน
 | ✅ Fixed | TP ไม่มี mouse look | เพิ่ม `HandleMouseLook()` — right-click + drag (ไม่ทับ joystick) |
 | ✅ Fixed | uGUI dashboard ตัวอักษรเบลอ — TMP render เป็น mesh + LiberationSans default ไม่คม | ย้าย dashboard ทั้งหมดไป **HTML/CSS/TS overlay** (ดู section 18) — Inter font + native browser anti-alias |
 | ✅ Fixed | LiberationSans SDF ไม่มี Unicode glyph เช่น `◉ ◐ ▦ ▾` → TMP warn + แสดง □ | เลิกใช้ uGUI/TMP ตอน dashboard; ปัญหานี้ไม่ส่งผลกับ HTML overlay (ใช้ SVG icons) |
+| ✅ Fixed | HTML pin ที่ % viewport ไม่ track 3D world ตอนหมุนกล้อง + block input ทับ canvas | ย้ายทั้งหมดเป็น Unity 3D GameObject (`Assets/Scripts/Pins/`) + jslib bridge → JS detail panel |
+| ✅ Fixed | `TemplateData/style.css` ตั้ง `#unity-container.unity-desktop` = `position:absolute + transform:translate(-50%,-50%)` → container ถูกเลื่อนออกนอกจอ click กลางไม่ตรง canvas | dashboard style.css override `transform:none !important` + `inset:0 !important` |
+| ✅ Fixed | `transform: translateX(-50%)` ของ `.viewport-tabs`/`.card-row` ถูก override ตอน entrance animation (transform เป็น atomic property เขียน 2 ครั้ง = override) | **CSS var pattern** — `transform: translate(var(--cx, 0), var(--cy, 0)) translate(var(--ex, 0), var(--ey, 0))` ที่ overlay parent; per-element ตั้งแค่ var (ดู §18.4) |
+| ✅ Fixed | CSS var defaults ที่ `#dashboard-overlay > *` (ID specificity 100) ชนะ class rule (10) → `--cx: -50%` ของ `.viewport-tabs` ถูก override กลับ 0 | ไม่ตั้ง default บน parent — ใช้ fallback `var(--cx, 0)` แทน → ไม่มี cascade conflict |
+| ✅ Fixed | Card click ทำให้ detail panel reappear บน desktop หลัง user ปิดด้วย X | unified `body.detail-open` class เป็น single source of truth ทั้ง desktop+mobile — ไม่ใช้ inline display:none |
 | ℹ️ Ignore | Coplay toolbar warning | ไม่กระทบ ปล่อยไว้ได้ |
 
 ---
@@ -237,7 +246,7 @@ cd WebOverlay && bun run build      # ทำหลัง Unity build เสม�
 
 | Metric | Target | Current |
 |--------|--------|---------|
-| Build size | < 100 MB | **105 MB ⚠️** (HDR + MSAA 4x — ต้อง optimize) |
+| Build size | < 100 MB | **62 MB ✓** (Unity 6.3 + URP shader strip + compression) |
 | First load | < 30 วินาที | — |
 | FPS Desktop | 60 | — |
 | FPS Mobile | 30+ | — |
@@ -297,15 +306,23 @@ cd WebOverlay && bun run build      # ทำหลัง Unity build เสม�
 - [x] **SceneEditorOps + Editor Script Conventions §17** — idempotent pattern
 - [x] **Dashboard Web Overlay** — ย้ายจาก uGUI/TMP → HTML/CSS/TS (ดู section 18)
 - [x] PinMarker UI element (data points บนเมือง) — pin markers + click → swap detail panel
-- [ ] Hook Unity 3D → Dashboard (live pin position projection from world space + select event ↔ camera focus)
+- [x] **Pin moved to Unity 3D** (`Assets/Scripts/Pins/`) — Sphere markers ลอยที่ world position จริง, ไม่ block input
+- [x] **Bridge Unity ↔ Dashboard** — `DashboardBridge.jslib` + `WebGLIndexPatcher` (Unity pin click → JS detail panel, JS card click → Unity FocusOn)
+- [x] **Pin glow + Bloom** — URP Bloom volume + `PinMarker` emission animate per state (idle/hover/selected + sin pulse)
+- [x] **Multi-category dashboard** — 6 categories (districts/vehicles/lamps/power/cameras/network) generic `AssetData` shape
+- [x] **Sidebar behavior** — same item toggle, different item switch + open detail
+- [x] **Modern loading screen** — fullscreen overlay (Inter title + glow progress bar) + body.unity-ready fade trigger
+- [x] **Dashboard entrance fade-in stagger** — CSS var pattern (`--cx --cy --ex --ey`) + transition delay per element
+- [x] **Blur-reveal text animation** (Tailwind hero) — `splitChars`/`splitWords` + `.reveal-active` parent toggle
+- [x] **Mobile responsive** — card swiper + scroll-snap + viewport-controls hidden + breakpoint system
+- [x] **Unity splash dark theme** — `ConfigureSplashScreen.cs` (bg #060810 + LightOnDark + static)
+- [x] **WebGLIndexPatcher** — post-build hook inject dashboard CSS/JS + window.unityInstance + unity-ready trigger + .catch fallback + 60s watchdog
+- [x] **Build size < 100 MB** — current 62 MB (Unity 6.3 default compression)
+- [ ] Real lamp positions (สแกนจาก road geometry แทน hardcoded near-focus mock)
+- [ ] Pins per category — ตอนนี้ Unity spawn เฉพาะ lamps; vehicles/cameras/etc ยังไม่มี 3D marker
 - [ ] Day/night mode toggle (script swap fog/ambient/light)
-- [ ] Lamp Point Lights ตามแนวถนน (จาก profile_roads_*) — แทนที่ stress-test cluster
-- [ ] Emissive windows + Bloom post-FX
-- [ ] Optimize build size (< 100 MB) — ลด MSAA, HDR off ถ้าไม่จำเป็น
-- [ ] Auto-play (ไม่ต้องคลิกก่อน)
-- [ ] Custom domain
-- [ ] Loading screen
-- [ ] Background music
+- [ ] Emissive windows ตามแนวถนน
+- [ ] Auto-play (ไม่ต้องคลิกก่อน) + Custom domain + Background music
 
 ---
 
@@ -382,14 +399,15 @@ public static void Execute()
 ```
 WebOverlay/
 ├── src/
-│   ├── data.ts          — POCO + 5 LampData + 15 extra pin positions (mock)
+│   ├── data.ts          — generic AssetData + CATEGORIES + ASSETS per category (lamps/vehicles/power/cameras/network/districts)
 │   ├── icons.ts         — 15 inline SVG (Phosphor style, stroke 1.5px)
-│   ├── dom.ts           — el() helper แทน JSX (~30 lines)
-│   ├── components.ts    — topNav / sidebar / detailPanel / cardRow / pinLayer
-│   ├── main.ts          — mount + state (selectedId), targeted re-render
-│   └── style.css        — CSS vars (theme) + glass-morphism + responsive
+│   ├── dom.ts           — el() helper + splitChars/splitWords/resetReveal/nextRevealBase
+│   ├── components.ts    — topNav / sidebar / detailPanel / cardRow (generic per AssetData)
+│   ├── main.ts          — state.category + selectedByCategory + sidebar dispatch + bridge listener
+│   └── style.css        — CSS vars (theme) + glass-morphism + fade/blur-reveal + responsive breakpoints
+├── index.html           — standalone preview (test dashboard ไม่ต้องโหลด Unity)
 ├── tsconfig.json        — strict, ES2022, isolatedModules
-├── package.json         — scripts.build = bun build + bun copy
+├── package.json         — scripts: build / dev / serve / preview
 └── copy.ts              — drop dist → WebBuild/dashboard/
 ```
 
@@ -410,16 +428,44 @@ WebOverlay/src/*.ts ──[bun build]──► WebOverlay/dist/main.js (minified
 - **Comments ภาษาไทย** อธิบาย WHY (เหมือนกฎ C#)
 - **CSS variables** ใน `:root` — swap theme / accent color จากจุดเดียว
 - **Inter + JetBrains Mono** จาก Google Fonts — preload ตอน index.html parse
-- **pointer-events: none** ที่ overlay root → click ทะลุไป Unity canvas; เปิดเฉพาะที่ interactive (panel/card/pin)
-- **z-index map:**
-  - `#unity-container` = default (0)
-  - `.pin-layer` = 9
-  - `#dashboard-overlay > *` = 10–12 (topnav top)
+- **pointer-events: none** ที่ overlay root → click ทะลุไป Unity canvas; เปิดเฉพาะที่ interactive (panel/card)
+- **z-index map:** `#unity-container` = 0 / `#unity-loading-bar` = 50 / `#dashboard-overlay > *` = 10–12
 
-### 18.5 จะต่อ live data จาก Unity ได้ยังไง (future)
-- Unity → JS: `Application.ExternalCall("window.dashboardUpdate", JSON.stringify(payload))` (ผ่าน jslib)
-- JS → Unity: `unityInstance.SendMessage("DashboardBridge", "OnPinSelect", id)` (รับด้วย MonoBehaviour `OnPinSelect(string)`)
-- ตำแหน่ง pin จริง: คำนวณใน Unity (`Camera.WorldToScreenPoint`) + ส่ง array ของ `{id, x, y}` มาทุก ~16ms; JS update CSS `transform: translate(x, y)` ของ pin element แทน hardcoded `--x/--y` (`pinXPct/pinYPct` ใน data.ts)
+#### Visibility (detail panel) — single source of truth
+- `body.detail-open` class ควบคุม visibility ทั้ง desktop + mobile (`.detail { display: none }` default → `body.detail-open .detail { display: block }`)
+- ห้ามใช้ inline `style.display = 'none'` — กัน CSS rule shadow
+- Init: JS เซ็ต `body.detail-open` บน desktop default (mobile = ปิด default)
+- **Card/Pin click = silent visibility** — เปลี่ยนแค่ data ไม่แตะ class นี้; sidebar lamp toggle เป็นวิธีเดียวที่เปิด/ปิด
+- **Sidebar same item** = toggle; **different item** = swap category + เปิด detail
+
+#### Transform / entrance animation — CSS var pattern (avoid specificity trap)
+`transform` เป็น atomic property — เขียน 2 ครั้งจะ override กัน. ตั้ง transform เพียงครั้งเดียวที่ overlay parent ผ่าน CSS var:
+```css
+#dashboard-overlay > * {
+  /* ห้ามตั้ง --cx/--cy/--ex/--ey default ที่นี่ — ID specificity (100) ชนะ class (10)
+     → element-specific --cx จะถูก override กลับ. ใช้ fallback ใน var() แทน */
+  transform: translate(var(--cx, 0), var(--cy, 0)) translate(var(--ex, 0), var(--ey, 0));
+}
+.viewport-tabs { --cx: -50%; --ey: -12px; transition-delay: 250ms; }  /* center + slide */
+.card-row      { --cx: -50%; --ey:  32px; transition-delay: 850ms; }
+body.unity-ready #dashboard-overlay > * { opacity: 1; --ex: 0; --ey: 0; }
+```
+ห้ามตั้ง `transform: translateX(-50%)` ใน element-specific rule เพราะจะถูก overlay parent override (ID > class specificity)
+
+#### Animation utilities (fade + blur-reveal)
+- `.fade-in` / `.fade-out` keyframe + `forwards` — replay ได้ทุก add class (transition replay ไม่ได้)
+- `splitChars(text, stepMs)` / `splitWords(text, stepMs, baseMs)` → spans + per-span `--d` animation-delay
+- Parent class `.reveal-active` กระตุ้น `blur-reveal` keyframe (blur 10px→0 + opacity + translateY) — **Tailwind hero pattern**
+- Block-level stagger: `resetReveal()` + `nextRevealBase(stepMs)` global counter ใน `dom.ts`
+- JS pattern: `el.classList.add('fade-in'); setTimeout(() => el.classList.remove(...), MS)`
+
+### 18.5 Bridge Unity ↔ Dashboard (implemented)
+- **Unity → JS:** `Assets/Plugins/WebGL/DashboardBridge.jslib` — `mergeInto(LibraryManager.library, { DashboardSelectPin: function(idPtr) { window.dashboardSelectPin(UTF8ToString(idPtr)) } })`
+- **C# side:** `[DllImport("__Internal")] static extern void DashboardSelectPin(string id);` + guard `#if UNITY_WEBGL && !UNITY_EDITOR`; editor stub `Debug.Log` กัน Play mode runtime error
+- **JS → Unity:** `window.unityInstance.SendMessage("PinManager", "FocusOnPin", id)`; เรียก public method ที่ MonoBehaviour
+- **`unityInstance` global:** `WebGLIndexPatcher.cs` (post-build callback) inject `window.unityInstance = unityInstance` + `document.body.classList.add('unity-ready')` ลงใน `index.html` `createUnityInstance.then` callback
+- **Failsafe:** patcher ก็ inject 60s watchdog + `.catch` fallback → force `unity-ready` กันค้างหน้า loading
+- **Anti-loop:** dashboard side ส่ง `syncToUnity: boolean` ใน `select()` — call from Unity → false → ไม่ SendMessage กลับ → infinite loop กัน
 
 ### 18.6 ห้าม
 - ❌ commit `WebOverlay/dist/` หรือ `node_modules/` — gitignore แล้ว

@@ -1,9 +1,14 @@
 // UI builders — แต่ละ function สร้าง 1 section ของ dashboard
-// state อยู่นอกฟังก์ชัน (main.ts) — components รับ data + callback เท่านั้น (SRP/Pure)
+// components เป็น pure renderers — รับ data + callback เท่านั้น
+// state อยู่นอกฟังก์ชัน (main.ts) ← SRP
+//
+// Text reveal: ทุก text ที่เป็น content (ไม่ใช่ UI chrome) wrap ด้วย splitWords/splitChars
+//   counter resetReveal() + nextRevealBase() ทำงานเป็น stagger between blocks
+//   ปลอดภัยตอน render parallel (cards + detail) เพราะ buildCards/buildDetail ใน main.ts รัน sequential
 
-import { el, icon } from './dom';
+import { el, icon, splitChars, splitWords, resetReveal, nextRevealBase } from './dom';
 import { ICONS, IconName } from './icons';
-import { LampData, EXTRA_PINS } from './data';
+import type { AssetData, Category, CategoryMeta } from './data';
 
 // ---------- TOP NAV ----------
 export function topNav(): HTMLElement {
@@ -25,11 +30,11 @@ export function topNav(): HTMLElement {
     el('div', { className: 'topnav__right' },
       el('button', { className: 'chip', type: 'button' },
         icon(ICONS.pin, 'icon icon--sm icon--muted'),
-        el('span', {}, 'Singapore'),
+        el('span', {}, 'ราชวิทยาลัยจุฬาภรณ์'),
       ),
       el('button', { className: 'chip', type: 'button' },
         icon(ICONS.moon, 'icon icon--sm icon--amber'),
-        el('span', {}, '75°F, 11:00 PM'),
+        el('span', {}, '28°C, 23:00'),
       ),
       el('button', { className: 'icon-btn', type: 'button', 'aria-label': 'Notifications' },
         icon(ICONS.bell, 'icon icon--md icon--muted'),
@@ -40,25 +45,24 @@ export function topNav(): HTMLElement {
 }
 
 // ---------- LEFT SIDEBAR ----------
-export function sidebar(): HTMLElement {
-  const item = (name: IconName, active = false) =>
-    el('button', {
-      className: `side-item${active ? ' side-item--active' : ''}`,
-      type: 'button',
-      'aria-label': name,
-    }, icon(ICONS[name], 'icon icon--md'));
-
+export function sidebar(
+  categories: CategoryMeta[],
+  activeKey: Category,
+  onItemClick: (key: Category) => void,
+): HTMLElement {
   return el('aside', { className: 'sidebar' },
-    item('globe'),
-    item('car'),
-    item('lamp', true),
-    item('bolt'),
-    item('cam'),
-    item('net'),
+    ...categories.map((c) =>
+      el('button', {
+        className: `side-item${c.key === activeKey ? ' side-item--active' : ''}`,
+        type: 'button',
+        'aria-label': c.label,
+        onClick: () => onItemClick(c.key),
+      }, icon(ICONS[c.icon], 'icon icon--md'))
+    ),
   );
 }
 
-// ---------- VIEWPORT TABS (top center) ----------
+// ---------- VIEWPORT TABS ----------
 export function viewportTabs(): HTMLElement {
   const pill = (label: string, active = false) =>
     el('button', { className: `pill${active ? ' pill--active' : ''}`, type: 'button' }, label);
@@ -67,7 +71,7 @@ export function viewportTabs(): HTMLElement {
   );
 }
 
-// ---------- VIEWPORT CONTROLS (right side, floating) ----------
+// ---------- VIEWPORT CONTROLS ----------
 export function viewportControls(): HTMLElement {
   const btn = (svg: string, label: string, sub = false) =>
     el('button', { className: `ctrl-btn${sub ? ' ctrl-btn--sub' : ''}`, type: 'button', 'aria-label': label },
@@ -82,37 +86,31 @@ export function viewportControls(): HTMLElement {
   );
 }
 
-// ---------- LAMP DETAIL PANEL (left) ----------
-export function detailPanel(d: LampData, onClose: () => void): HTMLElement {
-  const needRepair = d.status === 'NeedRepair';
-  const statusLabel = needRepair ? 'Need Repair' : d.status === 'On' ? 'Active' : 'Off';
+// ---------- DETAIL PANEL ----------
+export function detailPanel(d: AssetData, onClose: () => void): HTMLElement {
+  // reset reveal counter — แต่ละ render ของ detail นับใหม่
+  resetReveal();
 
-  // 24 bars: <div style="height:Y%"></div>
-  const bars = d.illuminationProfile.map((v) =>
-    el('div', { className: 'bar', style: `--h:${Math.max(2, v * 100)}%` }),
-  );
+  // pre-compute spans ตามลำดับ render (counter เพิ่มทีละ block)
+  const idBase = nextRevealBase(0);
+  const idSpans = splitChars(d.id, 18, idBase);
 
-  const kv = (key: string, value: string, opts: { mono?: boolean; color?: 'red' | 'amber' } = {}) =>
-    el('div', { className: 'kv' },
-      el('span', { className: 'kv__key' }, key),
-      el('span', {
-        className: `kv__val${opts.mono ? ' kv__val--mono' : ''}${opts.color ? ' kv__val--' + opts.color : ''}`,
-      }, value),
-    );
+  const addrBase = nextRevealBase(55);
+  const addrSpans = splitWords(d.address, 32, addrBase);
 
   return el('section', { className: 'detail' },
-    // header
     el('header', { className: 'detail__header' },
-      el('h2', { className: 'detail__id' }, d.id),
-      el('span', { className: `dot dot--${needRepair ? 'red' : 'blue'}` }),
+      el('h2', { className: 'detail__id' }, ...idSpans),
+      el('span', { className: `dot dot--${d.status.color}` }),
       el('span', { className: 'detail__spacer' }),
       el('button', { className: 'icon-btn icon-btn--sm', type: 'button', 'aria-label': 'Close', onClick: onClose },
         icon(ICONS.close, 'icon icon--sm')),
     ),
     el('div', { className: 'detail__addr' },
       icon(ICONS.pin, 'icon icon--xs icon--muted'),
-      el('span', {}, d.address),
+      el('span', {}, ...addrSpans),
     ),
+    // sub tabs — UI chrome static (ไม่ animate)
     el('nav', { className: 'detail__tabs' },
       el('button', { className: 'subtab subtab--active', type: 'button' }, 'Overview'),
       el('button', { className: 'subtab', type: 'button' }, 'Settings'),
@@ -120,30 +118,61 @@ export function detailPanel(d: LampData, onClose: () => void): HTMLElement {
     ),
     el('div', { className: 'detail__preview' },
       el('div', { className: 'preview-glow' }),
-      icon(ICONS.lamp, 'icon icon--xl'),
+      icon(ICONS[d.previewIcon], 'icon icon--xl'),
     ),
-    // LAMP section
+    ...d.sections.flatMap(renderSection),
+    ...(d.chart ? [renderChart(d.chart)] : []),
+    ...(d.controls && d.controls.length > 0
+      ? [el('div', { className: 'dropdowns' }, ...d.controls.map(renderDropdown))]
+      : []),
+  );
+}
+
+function renderSection(s: AssetData['sections'][number]): HTMLElement[] {
+  const titleBase = nextRevealBase(80);
+  return [
     el('div', { className: 'section-head' },
       el('span', { className: 'section-bullet' }),
-      'LAMP'),
+      ...splitWords(s.title, 45, titleBase),
+    ),
     el('div', { className: 'kv-list' },
-      el('div', { className: 'kv' },
-        el('span', { className: 'kv__key' }, 'Status'),
-        el('span', { className: 'kv__val-cluster' },
-          el('span', { className: `dot dot--xs dot--${needRepair ? 'red' : 'green'}` }),
-          el('span', { className: `kv__val${needRepair ? ' kv__val--red' : ''}` }, statusLabel),
-        ),
-      ),
-      kv('Type', d.type),
-      kv('Remaining Life Span', `${d.lifeSpanPercent}%`),
-      kv('Light Intensity', `${d.lightIntensityLm} lm`, { mono: true }),
-      kv('Consumption', `${d.consumptionKWh} kWh`, { mono: true }),
-      kv('Power', `${d.powerW}W`, { mono: true }),
+      ...s.rows.map(renderKv),
     ),
-    // illumination
+  ];
+}
+
+function renderKv(row: AssetData['sections'][number]['rows'][number]): HTMLElement {
+  // key + value share same base — reveal as one row, stagger ระหว่าง row ผ่าน nextRevealBase()
+  const rowBase = nextRevealBase(35);
+  const valClass = `kv__val${row.mono ? ' kv__val--mono' : ''}${row.tint ? ' kv__val--' + row.tint : ''}`;
+  const keySpans = splitWords(row.key, 28, rowBase);
+  const valSpans = splitWords(row.value, 22, rowBase + 55);
+
+  if (row.signal) {
+    return el('div', { className: 'kv' },
+      el('span', { className: 'kv__key' }, ...keySpans),
+      el('span', { className: 'kv__val-cluster' },
+        icon(row.signal === 'good' ? ICONS.signalGood : ICONS.signalWeak,
+          `icon icon--xs ${row.signal === 'good' ? 'icon--green' : 'icon--amber'}`),
+        el('span', { className: valClass }, ...valSpans),
+      ),
+    );
+  }
+  return el('div', { className: 'kv' },
+    el('span', { className: 'kv__key' }, ...keySpans),
+    el('span', { className: valClass }, ...valSpans),
+  );
+}
+
+function renderChart(chart: NonNullable<AssetData['chart']>): HTMLElement {
+  const titleBase = nextRevealBase(100);
+  const bars = chart.values.map((v) =>
+    el('div', { className: 'bar', style: `--h:${Math.max(2, v * 100)}%` }),
+  );
+  return el('div', { className: 'chart-wrap' },
     el('div', { className: 'section-head' },
       el('span', { className: 'section-bullet' }),
-      'ILLUMINATION PROFILE',
+      ...splitWords(chart.title, 45, titleBase),
     ),
     el('div', { className: 'chart' },
       el('div', { className: 'chart__y' },
@@ -151,41 +180,18 @@ export function detailPanel(d: LampData, onClose: () => void): HTMLElement {
       ),
       el('div', { className: 'chart__bars' }, ...bars),
       el('div', { className: 'chart__x' },
-        el('span', {}, '00:00'), el('span', {}, '12:00'),
-        el('span', {}, '18:00'), el('span', {}, '00:00'),
+        ...chart.xLabels.map((l) => el('span', {}, l)),
       ),
-    ),
-    // dropdowns
-    el('div', { className: 'dropdowns' },
-      dropdown('Operating Mode:', 'Scheduling'),
-      dropdown('Profile:', 'Park Area'),
-    ),
-    // CONTROLLER section
-    el('div', { className: 'section-head' },
-      el('span', { className: 'section-bullet' }),
-      'CONTROLLER',
-    ),
-    el('div', { className: 'kv-list' },
-      el('div', { className: 'kv' },
-        el('span', { className: 'kv__key' }, 'Connection'),
-        el('span', { className: 'kv__val-cluster' },
-          icon(d.connection === 'Good' ? ICONS.signalGood : ICONS.signalWeak,
-            `icon icon--xs ${d.connection === 'Good' ? 'icon--green' : 'icon--amber'}`),
-          el('span', { className: `kv__val${d.connection === 'Good' ? '' : ' kv__val--amber'}` }, d.connection),
-        ),
-      ),
-      kv('Uptime', d.uptime, { mono: true }),
-      kv('Controller ID', d.controllerId, { mono: true }),
-      kv('Model', d.controllerModel, { mono: true }),
     ),
   );
 }
 
-function dropdown(label: string, value: string): HTMLElement {
+function renderDropdown(c: { label: string; value: string }): HTMLElement {
+  const dBase = nextRevealBase(55);
   return el('div', { className: 'dd' },
-    el('label', { className: 'dd__label' }, label),
+    el('label', { className: 'dd__label' }, ...splitWords(c.label, 28, dBase)),
     el('button', { className: 'dd__box', type: 'button' },
-      el('span', {}, value),
+      el('span', {}, ...splitWords(c.value, 28, dBase + 40)),
       icon(ICONS.chevron, 'icon icon--sm icon--muted'),
     ),
   );
@@ -193,78 +199,62 @@ function dropdown(label: string, value: string): HTMLElement {
 
 // ---------- BOTTOM CARD ROW ----------
 export function cardRow(
-  lamps: LampData[],
+  items: AssetData[],
   selectedId: string,
   onSelect: (id: string) => void,
 ): HTMLElement {
+  // counter เริ่มใหม่สำหรับ card row (ไม่ปนกับ detail)
+  resetReveal();
   return el('div', { className: 'card-row' },
-    ...lamps.map((d) => lampCard(d, d.id === selectedId, () => onSelect(d.id))),
+    ...items.map((d) => assetCard(d, d.id === selectedId, () => onSelect(d.id))),
   );
 }
 
-function lampCard(d: LampData, selected: boolean, onClick: () => void): HTMLElement {
-  const needRepair = d.status === 'NeedRepair';
-  const lampLabel = needRepair ? 'Need Repair' : d.status;
+function assetCard(d: AssetData, selected: boolean, onClick: () => void): HTMLElement {
+  // แต่ละ card stagger จาก card ก่อนหน้า + content cascade ภายใน
+  const cardBase = nextRevealBase(80);
+  const idSpans   = splitChars(d.id, 15, cardBase);
+  const addrSpans = splitWords(d.address, 28, cardBase + 40);
+
   return el('button', {
     className: `card${selected ? ' card--selected' : ''}`,
     type: 'button',
     onClick,
   },
     el('div', { className: 'card__head' },
-      el('span', { className: 'card__id' }, d.id),
-      el('span', { className: `dot dot--xs dot--${needRepair ? 'red' : 'blue'}` }),
+      el('span', { className: 'card__id' }, ...idSpans),
+      el('span', { className: `dot dot--xs dot--${d.status.color}` }),
       el('span', { className: 'card__spacer' }),
       icon(ICONS.arrow, 'icon icon--sm icon--muted'),
     ),
     el('div', { className: 'card__addr' },
       icon(ICONS.pin, 'icon icon--xs icon--muted'),
-      el('span', {}, d.address),
+      el('span', {}, ...addrSpans),
     ),
     el('div', { className: 'card__info' },
-      el('div', { className: 'card__col' },
-        el('span', { className: 'card__label' }, 'Lamp'),
-        el('span', { className: `card__value${needRepair ? ' card__value--red' : ''}` }, lampLabel),
-      ),
-      el('div', { className: 'card__col' },
-        el('span', { className: 'card__label' }, 'Connection'),
-        el('span', { className: 'card__value card__value--row' },
-          icon(d.connection === 'Good' ? ICONS.signalGood : ICONS.signalWeak,
-            `icon icon--xs ${d.connection === 'Good' ? 'icon--green' : 'icon--amber'}`),
-          el('span', { className: d.connection === 'Good' ? '' : 'card__value--amber' }, d.connection),
-        ),
-      ),
+      renderCardField(d.cardPrimary,   cardBase + 90),
+      renderCardField(d.cardSecondary, cardBase + 120),
     ),
   );
 }
 
-// ---------- PIN LAYER ----------
-export function pinLayer(
-  lamps: LampData[],
-  selectedId: string,
-  onSelect: (id: string) => void,
-): HTMLElement {
-  return el('div', { className: 'pin-layer' },
-    ...lamps.map((d) => pin(d.id, d.pinXPct, d.pinYPct,
-      d.status === 'NeedRepair' ? 'red' : 'blue',
-      d.id === selectedId,
-      () => onSelect(d.id))),
-    ...EXTRA_PINS.map((p, i) => pin(`extra-${i}`, p.x, p.y, 'blue', false, () => {})),
-  );
-}
+function renderCardField(f: AssetData['cardPrimary'], baseMs: number): HTMLElement {
+  const valClass = `card__value${f.tint ? ' card__value--' + f.tint : ''}`;
+  const labelSpans = splitWords(f.label, 22, baseMs);
+  const valSpans   = splitWords(f.value, 22, baseMs + 28);
 
-function pin(
-  id: string, xPct: number, yPct: number,
-  color: 'red' | 'blue', selected: boolean, onClick: () => void,
-): HTMLElement {
-  return el('button', {
-    className: `pin pin--${color}${selected ? ' pin--selected' : ''}`,
-    type: 'button',
-    style: `left:${xPct}%;top:${yPct}%`,
-    onClick,
-    'data-id': id,
-  },
-    el('span', { className: 'pin__halo' }),
-    el('span', { className: 'pin__dot' }),
-    selected && el('span', { className: 'pin__pulse' }),
+  if (f.signal) {
+    return el('div', { className: 'card__col' },
+      el('span', { className: 'card__label' }, ...labelSpans),
+      el('span', { className: 'card__value card__value--row' },
+        icon(f.signal === 'good' ? ICONS.signalGood : ICONS.signalWeak,
+          `icon icon--xs ${f.signal === 'good' ? 'icon--green' : 'icon--amber'}`),
+        el('span', { className: f.signal === 'good' ? '' : 'card__value--amber' }, ...valSpans),
+      ),
+    );
+  }
+  return el('div', { className: 'card__col' },
+    el('span', { className: 'card__label' }, ...labelSpans),
+    el('span', { className: valClass }, ...valSpans),
   );
 }

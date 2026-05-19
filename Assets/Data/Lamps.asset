@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d7144abe5e69944a8d1c1b353af1adf, type: 3}
+  m_Name: Lamps
+  m_EditorClassIdentifier: Assembly-CSharp::Julaporn.Pins.LampDataAsset
+  lamps:
+  - id: LP-A012423
+    status: 0
+    worldPosition: {x: 50, y: 80, z: 380}
+  - id: LP-A012406
+    status: 2
+    worldPosition: {x: 130, y: 80, z: 420}
+  - id: LP-A012417
+    status: 1
+    worldPosition: {x: 210, y: 80, z: 400}
+  - id: LP-A012438
+    status: 0
+    worldPosition: {x: 80, y: 80, z: 460}
+  - id: LP-A012414
+    status: 1
+    worldPosition: {x: 180, y: 80, z: 480}

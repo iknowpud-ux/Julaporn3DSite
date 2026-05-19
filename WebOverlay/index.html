@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Julaporn Dashboard — Standalone Preview</title>
+
+    <!--
+      Standalone test page สำหรับ iterate dashboard overlay โดยไม่ต้องโหลด Unity WebGL (105 MB)
+      อ่าน CSS จาก src/ ตรงๆ + load compiled bundle จาก dist/main.js
+      วิธีรัน:
+        1. cd WebOverlay
+        2. bun run preview          (build + serve port 3001)
+        3. เปิด http://localhost:3001
+      หรือ watch mode (rebuild อัตโนมัติเมื่อแก้ .ts):
+        - terminal 1:  bun run dev
+        - terminal 2:  bun run serve
+    -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <link rel="stylesheet" href="./src/style.css" />
+
+    <style>
+      /* Placeholder background — จำลอง Unity canvas เพื่อให้เห็น overlay บน dark city
+         (style.css จริงตั้ง #unity-canvas เป็น var(--bg-page) — ใช้สีเดียวกันได้เลย) */
+      .stage {
+        position: fixed;
+        inset: 0;
+        background:
+          radial-gradient(
+            ellipse at 30% 30%,
+            rgba(79, 134, 247, 0.12) 0%,
+            transparent 45%
+          ),
+          radial-gradient(
+            ellipse at 70% 70%,
+            rgba(63, 191, 127, 0.06) 0%,
+            transparent 50%
+          ),
+          linear-gradient(180deg, #0a0e18 0%, #060810 100%);
+        z-index: 0;
+      }
+      /* badge บอกว่ากำลังอยู่ใน standalone preview — ไม่ใช่ production */
+      .preview-badge {
+        position: fixed;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 99;
+        padding: 6px 14px;
+        background: rgba(15, 19, 28, 0.85);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        color: #9ca3af;
+        font: 500 11px/1 'JetBrains Mono', monospace;
+        letter-spacing: 0.04em;
+        pointer-events: none;
+      }
+      .preview-badge::before {
+        content: '●';
+        color: #f0b040;
+        margin-right: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- mock background แทน Unity canvas -->
+    <div class="stage"></div>
+
+    <!-- host element ที่ main.ts หา (ดู src/main.ts บรรทัด 70) -->
+    <div id="dashboard-overlay"></div>
+
+    <div class="preview-badge">STANDALONE PREVIEW · no Unity</div>
+
+    <script type="module" src="./dist/main.js"></script>
+  </body>
+</html>

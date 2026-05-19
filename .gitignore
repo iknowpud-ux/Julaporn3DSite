@@ -6,6 +6,7 @@
 
 # WebOverlay (HTML/CSS/TS dashboard source)
 # - source ใน WebOverlay/src/ commit ขึ้น repo
+# - WebOverlay/index.html = standalone preview (commit — รัน bun run preview)
 # - compiled output ที่ deploy จริงอยู่ใน WebBuild/dashboard/ (commit)
 # - intermediate dist/ + node_modules ignore (regenerable ด้วย `bun run build`)
 /WebOverlay/dist/

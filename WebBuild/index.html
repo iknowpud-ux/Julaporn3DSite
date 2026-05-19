@@ -6,7 +6,7 @@
     <title>Unity Web Player | Julaporn3DSite</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
-    <!-- Dashboard overlay (HTML/CSS/TS) — ห้ามแก้ direct, source อยู่ที่ WebOverlay/ -->
+      <!-- Dashboard overlay (HTML/CSS/TS) — source ที่ WebOverlay/, ห้ามแก้ไฟล์ใน dashboard/ direct -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -115,18 +115,23 @@
 
       document.querySelector("#unity-loading-bar").style.display = "block";
 
+      // watchdog: ถ้า Unity load ไม่เสร็จใน 60s → unhide dashboard กันค้าง
+      setTimeout(() => document.body.classList.add('unity-ready'), 60000);
       var script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
         createUnityInstance(canvas, config, (progress) => {
           document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
               }).then((unityInstance) => {
+                window.unityInstance = unityInstance;
+                document.body.classList.add('unity-ready');
                 document.querySelector("#unity-loading-bar").style.display = "none";
                 document.querySelector("#unity-fullscreen-button").onclick = () => {
                   unityInstance.SetFullscreen(1);
                 };
 
               }).catch((message) => {
+                document.body.classList.add('unity-ready');
                 alert(message);
               });
             };
@@ -134,7 +139,7 @@
       document.body.appendChild(script);
 
     </script>
-    <!-- Dashboard overlay mount point + bundle -->
+      <!-- Dashboard overlay mount point + bundle -->
     <div id="dashboard-overlay"></div>
     <script type="module" src="dashboard/dashboard.js"></script>
   </body>

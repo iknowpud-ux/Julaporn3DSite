@@ -56,24 +56,116 @@ html, body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
-/* Unity canvas — บังคับ fullscreen */
+/* Unity canvas — บังคับ fullscreen
+   TemplateData/style.css ตั้ง .unity-desktop = position:absolute + transform:translate(-50%,-50%)
+   ต้อง override transform:none ด้วย ไม่งั้น container ถูกเลื่อนออกนอกจอ → click ทะลุ canvas ไม่ได้ */
 #unity-container.unity-desktop,
 #unity-container.unity-mobile,
 #unity-container {
   position: fixed !important;
   inset: 0 !important;
+  left: 0 !important;
+  top: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
   margin: 0 !important;
+  transform: none !important;
 }
 #unity-canvas {
   width: 100vw !important;
   height: 100vh !important;
   display: block;
   background: var(--bg-page);
+  transform: none !important;
 }
-#unity-footer, #unity-fullscreen-button, #unity-build-title, #unity-logo-title-footer {
+#unity-footer, #unity-fullscreen-button, #unity-build-title, #unity-logo-title-footer,
+#unity-logo {
   display: none !important;
+}
+
+/* ============================================================
+   LOADING SCREEN — wrap Unity progress bar เป็น fullscreen overlay
+   ก่อน body.unity-ready: แสดงเต็มจอ
+   หลัง body.unity-ready: fade out + remove from interaction
+   ============================================================ */
+#unity-loading-bar {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  transform: none !important;
+  z-index: 50;
+
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(79,134,247,0.10), transparent 60%),
+    linear-gradient(180deg, #0a0e18 0%, #060810 100%);
+
+  opacity: 1;
+  visibility: visible;
+  /* fade out 1100ms ให้พอเหลื่อมกับ dashboard fade-in (เริ่ม 150ms) → handoff นุ่ม */
+  transition: opacity 1100ms cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 1100ms;
+}
+body.unity-ready #unity-loading-bar {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Title + subtitle ผ่าน pseudo elements — กัน ต้อง inject HTML */
+#unity-loading-bar::before {
+  content: 'Smart City Platform';
+  font: 600 30px/1.2 'Inter', sans-serif;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  text-align: center;
+}
+#unity-progress-bar-empty::before {
+  content: 'ราชวิทยาลัยจุฬาภรณ์';
+  position: absolute;
+  left: 50%; top: -36px;
+  transform: translateX(-50%);
+  font: 500 13px/1 'Inter', sans-serif;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+#unity-progress-bar-empty {
+  position: relative;
+  width: 320px !important;
+  height: 4px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 999px;
+  margin: 32px 0 0 0 !important;
+  overflow: visible;
+  /* override default Unity img background */
+  background-image: none !important;
+}
+#unity-progress-bar-full {
+  height: 4px !important;
+  background: linear-gradient(90deg, var(--accent-blue), #6BA3FF) !important;
+  background-image: linear-gradient(90deg, var(--accent-blue), #6BA3FF) !important;
+  border-radius: 999px;
+  box-shadow: 0 0 16px rgba(79, 134, 247, 0.6);
+  margin: 0 !important;
+  transition: width 300ms ease;
+}
+#unity-progress-bar-empty::after {
+  content: 'Loading 3D environment…';
+  position: absolute;
+  left: 50%; top: calc(100% + 16px);
+  transform: translateX(-50%);
+  font: 500 11px/1 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 /* ============================================================
@@ -90,8 +182,47 @@ html, body {
   color: var(--text-primary);
 }
 #dashboard-overlay > * { pointer-events: auto; }
-.pin-layer { pointer-events: none; }
-.pin-layer > * { pointer-events: auto; }
+
+/* ============================================================
+   ENTRANCE ANIMATION — fade + slide stagger เมื่อ body.unity-ready
+   ใช้ transition ไม่ใช่ animation — ทำงานเฉพาะตอน class เปลี่ยน, ไม่ fire ซ้ำตอน rebuild
+
+   PATTERN: CSS variables แยกการ center กับ entrance
+     --cx/--cy  = center transform (ค่าคงที่ของ element นั้นๆ)
+     --ex/--ey  = enter offset (เริ่มจากค่า → 0 ตอน animate)
+   ทำไม var: transform เป็น atomic property — เขียน 2 ครั้งจะ override
+              ต้อง compose ใน string เดียว → ใช้ var ให้แยกความหมายชัด แต่ render รวมกัน
+
+   วิธีใช้กับ element ใหม่:
+     .my-panel { --cx: -50%; --ey: 30px; transition-delay: 300ms; }
+     เซ็นเตอร์อัตโนมัติ + slide จากล่างขึ้น (compose ใน rule ด้านล่างนี้)
+   ============================================================ */
+#dashboard-overlay > * {
+  /* ไม่ตั้ง --cx/--cy/--ex/--ey ที่นี่ — เพราะ ID specificity (100) จะชนะ class (10)
+     ของ element rules ด้านล่าง → จะ override --cx ของ .viewport-tabs/.card-row หาย
+     ใช้ fallback ใน var() แทน → var ที่ไม่ตั้ง = 0 อัตโนมัติ */
+  opacity: 0;
+  transform: translate(var(--cx, 0), var(--cy, 0)) translate(var(--ex, 0), var(--ey, 0));
+  /* duration 1100ms — นุ่มกว่า 700ms เดิม รู้สึก cinematic ขึ้น */
+  transition:
+    opacity 1100ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 1100ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* แต่ละ element ตั้งแค่ค่า var — ไม่ต้องเขียน transform: ... อีกแล้ว
+   stagger ขยับขึ้นมาเหมาะกับ duration ที่ยาวขึ้น (ช่องว่างใหญ่ขึ้น = อ่านง่าย) */
+.topnav            {                       --ey: -20px;  transition-delay: 150ms; }
+.sidebar           {                       --ex: -24px;  transition-delay: 300ms; }
+.viewport-tabs     { --cx: -50%;           --ey: -12px;  transition-delay: 400ms; }
+.detail            {                       --ex: -32px;  transition-delay: 550ms; }
+.viewport-controls {           --cy: -50%; --ex: 32px;   transition-delay: 700ms; }
+.card-row          { --cx: -50%;           --ey: 32px;   transition-delay: 850ms; }
+
+/* ตอน ready: เซ็ต enter ทั้งคู่กลับ 0 — center vars คงเดิม (เพราะไม่ได้ตั้งใหม่) */
+body.unity-ready #dashboard-overlay > * {
+  opacity: 1;
+  --ex: 0; --ey: 0;
+}
 
 /* ============================================================
    ICONS
@@ -243,11 +374,48 @@ html, body {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-panel);
   z-index: 11;
-  animation: panel-in .25s ease;
+  /* default: HIDDEN ทั้ง desktop และ mobile — visibility controlled by body.detail-open */
+  display: none;
 }
-@keyframes panel-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
-.detail--closing { animation: panel-out .18s ease forwards; }
-@keyframes panel-out { to { opacity: 0; transform: translateX(-12px); } }
+body.detail-open .detail { display: block; }
+
+/* ============================================================
+   FADE utility — ใช้ตอน sidebar trigger (toggle / category swap)
+   keyframe animation > transition: replay ได้ทุกครั้ง class ถูก re-add
+   ผ่าน forwards เพื่อให้ค่าสุดท้าย persist ระหว่างรอ JS ลบ class
+   ============================================================ */
+@keyframes fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+.fade-in  { animation: fade-in  280ms ease-out forwards; }
+.fade-out { animation: fade-out 180ms ease-out forwards; }
+
+/* ============================================================
+   BLUR REVEAL — Tailwind hero-style text intro (blur + slide + fade)
+   ใช้กับตัวอักษร/คำที่ split แล้ว (.reveal-char / .reveal-word)
+   default = visible ปกติ; เมื่อ parent มี .reveal-active → animation เล่น
+     --d (CSS var ต่อ span) = animation-delay ส่วนตัว → wave effect
+   ============================================================ */
+.reveal-char, .reveal-word {
+  display: inline-block;
+  white-space: pre;
+}
+.reveal-active .reveal-char,
+.reveal-active .reveal-word {
+  animation: blur-reveal 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes blur-reveal {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
 
 .detail::-webkit-scrollbar { width: 6px; }
 .detail::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
@@ -396,7 +564,8 @@ html, body {
 .viewport-tabs {
   position: fixed;
   top: calc(var(--topnav-h) + 16px);
-  left: 50%; transform: translateX(-50%);
+  left: 50%;
+  /* transform คุมจาก #dashboard-overlay > * (var --cx: -50% ใน entrance section) */
   display: flex; gap: 6px;
   padding: 4px;
   background: rgba(11, 14, 19, 0.7);
@@ -426,7 +595,7 @@ html, body {
   position: fixed;
   right: 18px;
   top: 50%;
-  transform: translateY(-50%);
+  /* transform คุมจาก #dashboard-overlay > * (var --cy: -50% ใน entrance section) */
   display: flex; flex-direction: column; gap: 4px;
   padding: 6px;
   background: rgba(11, 14, 19, 0.7);
@@ -456,7 +625,8 @@ html, body {
 .card-row {
   position: fixed;
   bottom: 16px;
-  left: 50%; transform: translateX(-50%);
+  left: 50%;
+  /* transform คุมจาก #dashboard-overlay > * (var --cx: -50% ใน entrance section) */
   display: flex; gap: 10px;
   z-index: 11;
   max-width: calc(100vw - 40px);
@@ -504,56 +674,88 @@ html, body {
 .card__value--red { color: var(--accent-red); }
 .card__value--amber { color: var(--accent-amber); }
 
-/* ============================================================
-   PIN LAYER + PINS
-   ============================================================ */
-.pin-layer { position: fixed; inset: 0; z-index: 9; }
-.pin {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: 22px; height: 22px;
-  background: transparent;
-  border: 0; padding: 0;
-  cursor: pointer;
-}
-.pin__halo, .pin__dot, .pin__pulse {
-  position: absolute; left: 50%; top: 50%;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-}
-.pin__halo { width: 22px; height: 22px; opacity: 0.25; }
-.pin__dot  { width: 10px; height: 10px; box-shadow: var(--shadow-pin); }
-.pin__pulse {
-  width: 22px; height: 22px;
-  border: 1.5px solid currentColor;
-  opacity: 0.6;
-  animation: pulse 1.4s ease-out infinite;
-}
-@keyframes pulse {
-  0%   { width: 22px; height: 22px; opacity: 0.6; }
-  100% { width: 48px; height: 48px; opacity: 0;   }
-}
-.pin--blue { color: var(--accent-blue); }
-.pin--blue .pin__halo { background: var(--accent-blue); }
-.pin--blue .pin__dot  { background: var(--accent-blue); }
-.pin--red  { color: var(--accent-red); }
-.pin--red  .pin__halo { background: var(--accent-red); }
-.pin--red  .pin__dot  { background: var(--accent-red); }
+/* pin layer ย้ายไปฝั่ง Unity (Assets/Scripts/Pins/) — ไม่มี HTML pin แล้ว */
+
+/* topnav__right กันล้นขวา — ให้ wrap ลงบรรทัดถัดไปแทน scroll horizontal */
+.topnav__right { flex-wrap: wrap; justify-content: flex-end; }
+
+/* Unity warning banner (error/warning) — z-index รองจาก loading bar */
+#unity-warning { z-index: 5 !important; }
 
 /* ============================================================
-   RESPONSIVE
+   RESPONSIVE — Desktop ≥1280 / iPad 1024 / Tablet 768 / Mobile 640
    ============================================================ */
+
+/* iPad landscape + small desktop */
 @media (max-width: 1280px) {
-  .topnav__center { gap: 22px; }
+  .topnav__center { gap: 18px; }
   .detail { width: 300px; }
   .card { flex-basis: 200px; }
 }
-@media (max-width: 960px) {
-  .topnav__center { display: none; }
-  .detail { left: 8px; width: calc(100vw - 16px); max-height: 60vh; }
-  .sidebar { width: 48px; }
-  .card-row { max-width: calc(100vw - 16px); overflow-x: auto; }
+
+/* iPad portrait */
+@media (max-width: 1024px) {
+  .topnav__center { gap: 14px; }
+  .detail { width: 280px; max-height: calc(100vh - var(--topnav-h) - var(--card-h) - 24px); }
+  .card { flex-basis: 180px; }
+  .card-row { gap: 8px; }
 }
 
-/* hide Unity default loading bar text */
-#unity-warning, #unity-loading-bar { z-index: 5 !important; }
+/* tablet portrait + large mobile — card-row swiper layout, ไม่ทับ sidebar */
+@media (max-width: 768px) {
+  :root { --topnav-h: 52px; --sidebar-w: 48px; --card-h: 100px; }
+  .topnav { padding: 0 12px; }
+  .topnav__center { display: none; }
+  .topnav__right .chip:nth-child(2) { display: none; }   /* ซ่อน weather chip */
+
+  /* detail visibility — ใช้ rule กลาง (body.detail-open) ที่นิยามไว้แล้ว ไม่ต้อง override */
+
+  .detail {
+    left: calc(var(--sidebar-w) + 8px);
+    width: 260px;
+    top: calc(var(--topnav-h) + 8px);
+  }
+
+  /* card-row: ออกจาก sidebar zone + swiper-style scroll-snap */
+  .card-row {
+    left: calc(var(--sidebar-w) + 8px);
+    right: 8px;
+    max-width: none;
+    --cx: 0;                                  /* ยกเลิก center -50% — ใช้ left/right boundary แทน */
+    overflow-x: auto;
+    overflow-y: visible;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 8px;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .card-row::-webkit-scrollbar { display: none; }
+  .card-row { scrollbar-width: none; }
+  .card { flex-basis: 200px; height: var(--card-h); scroll-snap-align: start; }
+}
+
+/* mobile — true single-column + hide secondary controls */
+@media (max-width: 640px) {
+  .topnav__right .chip:first-child span { display: none; }  /* เหลือแค่ pin icon */
+  .topnav__right .chip { padding: 0 8px; }
+  .viewport-tabs { display: none; }                          /* compact mode */
+  .viewport-controls { display: none; }                      /* ซ่อน zoom/2D/layers บน mobile */
+
+  /* detail: full available width, ไม่ทับ sidebar */
+  .detail {
+    left: calc(var(--sidebar-w) + 8px);
+    right: 8px;
+    width: auto;
+    top: calc(var(--topnav-h) + 8px);
+    max-height: calc(100vh - var(--topnav-h) - var(--card-h) - 32px);
+  }
+
+  /* card swiper: 1 card per view + ดูดเหลือ peek ของถัดไป */
+  .card { flex-basis: 78vw; max-width: 280px; }
+
+  /* loading screen — title เล็กลง + progress bar fluid */
+  #unity-loading-bar::before { font-size: 22px; }
+  #unity-progress-bar-empty { width: min(280px, calc(100vw - 48px)) !important; }
+  #unity-progress-bar-empty::before { font-size: 11px; }
+  #unity-progress-bar-empty::after { font-size: 10px; }
+}
