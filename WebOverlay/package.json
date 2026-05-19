@@ -1,0 +1,15 @@
+{
+  "name": "julaporn-dashboard-overlay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/main.ts --target=browser --outdir=dist --minify --sourcemap=external && bun run copy",
+    "copy": "bun copy.ts",
+    "dev": "bun build src/main.ts --target=browser --outdir=dist --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/bun": "latest"
+  }
+}

@@ -4,6 +4,15 @@
 # WebGL build output — เปิดไว้เพื่อ deploy บน Vercel
 # /WebBuild/
 
+# WebOverlay (HTML/CSS/TS dashboard source)
+# - source ใน WebOverlay/src/ commit ขึ้น repo
+# - compiled output ที่ deploy จริงอยู่ใน WebBuild/dashboard/ (commit)
+# - intermediate dist/ + node_modules ignore (regenerable ด้วย `bun run build`)
+/WebOverlay/dist/
+/WebOverlay/node_modules/
+/WebOverlay/*.tsbuildinfo
+/WebOverlay/bun.lock
+
 # Coplay MCP (local dev tool)
 /Packages/Coplay/
 

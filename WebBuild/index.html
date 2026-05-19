@@ -6,6 +6,11 @@
     <title>Unity Web Player | Julaporn3DSite</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
+    <!-- Dashboard overlay (HTML/CSS/TS) — ห้ามแก้ direct, source อยู่ที่ WebOverlay/ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+    <link rel="stylesheet" href="dashboard/style.css">
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
@@ -129,5 +134,8 @@
       document.body.appendChild(script);
 
     </script>
+    <!-- Dashboard overlay mount point + bundle -->
+    <div id="dashboard-overlay"></div>
+    <script type="module" src="dashboard/dashboard.js"></script>
   </body>
 </html>
