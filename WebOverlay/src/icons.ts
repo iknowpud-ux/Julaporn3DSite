@@ -26,6 +26,7 @@ export const ICONS = {
   arrow:  svg('<path d="M5 12h14M13 5l7 7-7 7"/>'),
   signalGood: svg('<path d="M4 18h2v-2H4zm5 0h2v-5H9zm5 0h2V8h-2zm5 0h2V3h-2z" fill="currentColor" stroke="none"/>'),
   signalWeak: svg('<path d="M4 18h2v-2H4zm5 0h2v-5H9z" fill="currentColor" stroke="none"/><path d="M14 18h2V8h-2zm5 0h2V3h-2z" opacity="0.25" fill="currentColor" stroke="none"/>'),
+  mic: svg('<path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3M8 22h8"/>'),
 };
 
 export type IconName = keyof typeof ICONS;

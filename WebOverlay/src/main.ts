@@ -14,6 +14,9 @@ import {
   topNav, sidebar, viewportTabs, viewportControls,
   detailPanel, cardRow,
 } from './components';
+import { createVoice, voiceSupported, type VoiceCommand } from './voice';
+import { el, icon } from './dom';
+import { ICONS } from './icons';
 
 interface Refs {
   root: HTMLElement;
@@ -163,6 +166,86 @@ function toggleDetail(refs: Refs): void {
   else openDetail(refs);
 }
 
+// ---------- voice toast ----------
+// แสดง feedback สั้นๆ ว่า mic ได้ยินอะไร (auto-hide หลัง 2 วินาที)
+let _toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showVoiceToast(text: string, matched: boolean): void {
+  let toast = document.getElementById('voice-toast');
+  if (!toast) {
+    toast = el('div', { id: 'voice-toast', className: 'voice-toast' });
+    document.body.appendChild(toast);
+  }
+  // prefix แสดงสถานะ: ✓ match / ~ ไม่ match
+  toast.textContent = `${matched ? '✓' : '~'} "${text}"`;
+  toast.classList.add('voice-toast--show');
+
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    toast!.classList.remove('voice-toast--show');
+  }, 2000);
+}
+
+// หา card ในหมวดปัจจุบันที่ address/id ตรงกับ keyword
+// ใช้เป็น fallback เมื่อ voice transcript ไม่ match command ใดเลย
+function findItemByKeyword(transcript: string): AssetData | null {
+  const t = transcript.toLowerCase().trim();
+  const items = currentItems();
+
+  // ลอง exact substring ก่อน (ครอบ TH + EN ในคำเดียว)
+  const exact = items.find(
+    (item) =>
+      item.address.toLowerCase().includes(t) ||
+      item.id.toLowerCase().includes(t),
+  );
+  if (exact) return exact;
+
+  // ลอง token matching — แยก transcript ตาม space/· แล้วหาว่า address มี token ไหนบ้าง
+  // กัน keyword สั้น 1-2 ตัวอักษรที่จะ false positive (เช่น "A", "B")
+  const tokens = t.split(/[\s·\-–]+/).filter((w) => w.length >= 3);
+  return (
+    items.find((item) =>
+      tokens.some((tok) => item.address.toLowerCase().includes(tok)),
+    ) ?? null
+  );
+}
+
+// ---------- voice command dispatcher ----------
+function handleVoiceCommand(refs: Refs, cmd: VoiceCommand, transcript: string): void {
+  showVoiceToast(transcript, true);
+  switch (cmd.type) {
+    case 'category':
+      onSidebarClick(refs, cmd.value);
+      break;
+    case 'select_index': {
+      const item = currentItems()[cmd.index];
+      if (item) select(refs, item.id, true);
+      break;
+    }
+    case 'focus_lamp': {
+      if (state.category !== 'lamps') {
+        // pre-set id ก่อน swap → swapCategory จะ render card+detail ถูกต้องทันที
+        state.selectedByCategory['lamps'] = cmd.id;
+        swapCategory(refs, 'lamps');
+        // ส่ง Unity focus หลัง fade animation เสร็จ (FADE_OUT_MS = 180ms)
+        setTimeout(() => {
+          window.unityInstance?.SendMessage('PinManager', 'FocusOnPin', cmd.id);
+        }, FADE_OUT_MS + 50);
+      } else {
+        select(refs, cmd.id, true);
+        if (!document.body.classList.contains('detail-open')) openDetail(refs);
+      }
+      break;
+    }
+    case 'open':
+      openDetail(refs);
+      break;
+    case 'close':
+      closeDetail(refs);
+      break;
+  }
+}
+
 // ---------- mount ----------
 function mount(host: HTMLElement): void {
   const refs: Refs = { root: host } as Refs;
@@ -170,7 +253,9 @@ function mount(host: HTMLElement): void {
   buildDetail(refs);
   buildCards(refs);
 
-  host.appendChild(topNav());
+  // สร้าง topNav ก่อน เพื่อ inject mic button เข้า .topnav__right
+  const nav = topNav();
+  host.appendChild(nav);
   host.appendChild(refs.sidebar);
   host.appendChild(refs.detail);
   host.appendChild(viewportTabs());
@@ -189,6 +274,54 @@ function mount(host: HTMLElement): void {
     }
     select(refs, id, false);
   };
+
+  // mic button — mount ต่อจาก bridge setup เพื่อ refs พร้อมแล้ว
+  initVoice(refs, nav);
+}
+
+// ---------- voice init ----------
+function initVoice(refs: Refs, nav: HTMLElement): void {
+  // ซ่อน mic button บน Firefox/Safari ที่ไม่รองรับ Web Speech API
+  if (!voiceSupported) return;
+
+  const micBtn = el('button', {
+    className: 'icon-btn mic-btn',
+    type: 'button',
+    'aria-label': 'Toggle voice commands',
+    title: 'คำสั่งเสียง (TH/EN)',
+  }, icon(ICONS.mic, 'icon icon--md'));
+
+  // inject เข้า .topnav__right ก่อน .avatar
+  const navRight = nav.querySelector('.topnav__right');
+  const avatar   = navRight?.querySelector('.avatar');
+  if (navRight && avatar) navRight.insertBefore(micBtn, avatar);
+
+  const voice = createVoice({
+    onCommand(cmd, transcript) {
+      handleVoiceCommand(refs, cmd, transcript);
+    },
+    onUnrecognized(transcript) {
+      // ไม่ match static command → ลอง keyword match กับ card ในหมวดปัจจุบัน
+      const item = findItemByKeyword(transcript);
+      if (item) {
+        select(refs, item.id, true);
+        showVoiceToast(transcript, true);
+        return;
+      }
+      // mic ได้ยินแต่ match ไม่ได้เลย — toast แจ้ง user
+      showVoiceToast(transcript, false);
+    },
+    onListening(active) {
+      micBtn.classList.toggle('mic-btn--listening', active);
+      micBtn.setAttribute('aria-pressed', String(active));
+    },
+    onPermissionDenied() {
+      micBtn.title = 'Microphone permission denied';
+      micBtn.classList.add('mic-btn--disabled');
+    },
+  });
+
+  micBtn.addEventListener('click', () => voice.toggle());
 }
 
 function init(): void {

@@ -759,3 +759,56 @@ body.detail-open .detail { display: block; }
   #unity-progress-bar-empty::before { font-size: 11px; }
   #unity-progress-bar-empty::after { font-size: 10px; }
 }
+
+/* ============================================================
+   VOICE COMMAND — mic button + listening pulse + toast
+   ============================================================ */
+
+/* mic button — ซ้อนอยู่ใน .topnav__right ระหว่าง bell กับ avatar */
+.mic-btn {
+  position: relative;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: none; background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.2s, background 0.2s;
+  pointer-events: all;
+}
+.mic-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+/* listening state — สีเปลี่ยน + pulse ring บอก user ว่า mic ทำงาน */
+.mic-btn--listening {
+  color: var(--accent-blue);
+  animation: mic-pulse 1.6s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(79, 134, 247, 0.5); }
+  50%       { box-shadow: 0 0 0 7px rgba(79, 134, 247, 0);   }
+}
+
+/* disabled state (permission denied) */
+.mic-btn--disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+
+/* voice toast — feedback สั้นๆ ว่า mic ได้ยินอะไร */
+#voice-toast {
+  position: fixed;
+  bottom: calc(var(--card-h) + 24px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-panel);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 7px 16px;
+  font-size: 13px; font-family: 'Inter', sans-serif;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  z-index: 30;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+#voice-toast.voice-toast--show { opacity: 1; }
