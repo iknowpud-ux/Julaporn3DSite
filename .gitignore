@@ -2,6 +2,7 @@
 .claude/
 .agents/
 AGENTS.md
+CLAUDE.md
 
 # WebGL build output — เปิดไว้เพื่อ deploy บน Vercel
 # /WebBuild/
