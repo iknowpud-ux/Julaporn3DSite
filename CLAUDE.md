@@ -318,6 +318,7 @@ cd WebOverlay && bun run build      # ทำหลัง Unity build เสม�
 - [x] **Unity splash dark theme** — `ConfigureSplashScreen.cs` (bg #060810 + LightOnDark + static)
 - [x] **WebGLIndexPatcher** — post-build hook inject dashboard CSS/JS + window.unityInstance + unity-ready trigger + .catch fallback + 60s watchdog
 - [x] **Build size < 100 MB** — current 62 MB (Unity 6.3 default compression)
+- [x] **Voice Command (TH/EN)** — Web Speech API overlay (`voice.ts`) + mic button topnav + command map: category switch / card ordinal / location focus / open-close detail (ดู §18.7)
 - [ ] Real lamp positions (สแกนจาก road geometry แทน hardcoded near-focus mock)
 - [ ] Pins per category — ตอนนี้ Unity spawn เฉพาะ lamps; vehicles/cameras/etc ยังไม่มี 3D marker
 - [ ] Day/night mode toggle (script swap fog/ambient/light)
@@ -400,11 +401,12 @@ public static void Execute()
 WebOverlay/
 ├── src/
 │   ├── data.ts          — generic AssetData + CATEGORIES + ASSETS per category (lamps/vehicles/power/cameras/network/districts)
-│   ├── icons.ts         — 15 inline SVG (Phosphor style, stroke 1.5px)
+│   ├── icons.ts         — 16 inline SVG (Phosphor style, stroke 1.5px) รวม mic
 │   ├── dom.ts           — el() helper + splitChars/splitWords/resetReveal/nextRevealBase
 │   ├── components.ts    — topNav / sidebar / detailPanel / cardRow (generic per AssetData)
-│   ├── main.ts          — state.category + selectedByCategory + sidebar dispatch + bridge listener
-│   └── style.css        — CSS vars (theme) + glass-morphism + fade/blur-reveal + responsive breakpoints
+│   ├── main.ts          — state.category + selectedByCategory + sidebar dispatch + bridge listener + voice init
+│   ├── voice.ts         — Web Speech API wrapper: createVoice() + CMD_MAP (TH/EN) + VoiceCommand types
+│   └── style.css        — CSS vars (theme) + glass-morphism + fade/blur-reveal + responsive + mic button
 ├── index.html           — standalone preview (test dashboard ไม่ต้องโหลด Unity)
 ├── tsconfig.json        — strict, ES2022, isolatedModules
 ├── package.json         — scripts: build / dev / serve / preview
@@ -470,5 +472,25 @@ body.unity-ready #dashboard-overlay > * { opacity: 1; --ex: 0; --ey: 0; }
 ### 18.6 ห้าม
 - ❌ commit `WebOverlay/dist/` หรือ `node_modules/` — gitignore แล้ว
 - ❌ แก้ `WebBuild/dashboard/*` direct — ต้องแก้ source ใน `WebOverlay/src/` แล้ว rebuild (จะถูก overwrite)
-- ❌ ใช้ React/Vue/lib ใหญ่ — keep bundle < 20 KB
+- ❌ ใช้ React/Vue/lib ใหญ่ — bundle ปัจจุบัน ~33 KB minified (voice.ts เพิ่ม ~10 KB); ไม่เพิ่ม lib ใหญ่อีก
 - ❌ load font จาก external server ใน production — ภายหลังควร self-host Inter/JetBrains Mono ที่ `WebBuild/dashboard/fonts/`
+
+### 18.7 Voice Command (Web Speech API)
+- **ไฟล์:** `WebOverlay/src/voice.ts` — export `createVoice(callbacks)` + `voiceSupported: boolean`
+- **Browser support:** Chrome/Edge เท่านั้น — Firefox ไม่รองรับ; mic button ซ่อนตัวเองถ้า `!voiceSupported`
+- **Language:** `rec.lang = 'th-TH'` — Chrome STT handle TH/EN code-switching ได้โดยธรรมชาติ
+- **Mode:** `continuous = true`, `interimResults = true`, `maxAlternatives = 3` — พูดได้เรื่อยๆ ไม่ต้องกดซ้ำ
+- **Callbacks:** `onCommand` / `onUnrecognized` / `onInterim` (interim transcript สด) / `onListening(bool)` / `onPermissionDenied`
+- **Voice Modal** (`#voice-modal`): Google-style popup กลางล่างจอ — แสดง interim transcript สดขณะพูด; ซ่อนเมื่อ mic ปิด
+  - สร้างด้วย `getVoiceModal()` ใน `main.ts` — lazy-create ครั้งเดียว toggle class `voice-modal--show`
+  - `hint` text: `เช่น "สวัสดี" "ไฟถนน" "ทางเข้าหลัก"`
+- **Mic button state:** `mic-btn--listening` = สีเขียว + pulse ring (rgba green) ขณะ mic เปิด
+- **CMD_MAP order (first-match wins):** location focus → categories → ordinals → greeting test → open/close
+  - location เป็น specific สุด ต้องอยู่บนสุด กัน "ลานจอดรถ" match "จอดรถ" ผิด category
+  - `greeting` (`สวัสดี/hello/hi`) → `alert()` — ใช้ทดสอบว่า STT ทำงานหรือเปล่า
+- **focus_lamp:** hardcode `{ id, patterns[] }` ตาม mock data — พูดชื่อสถานที่ได้จาก tab ไหนก็ได้
+  - ถ้า category ≠ lamps: `state.selectedByCategory['lamps'] = id` ก่อน `swapCategory()` → render ถูกทันที; Unity `SendMessage` หลัง `FADE_OUT_MS + 50ms`
+- **Keyword fallback:** `onUnrecognized` → `findItemByKeyword()` substring match กับ address ของ card ใน tab ปัจจุบัน (token ≥ 3 ตัวอักษร)
+- **Toast:** `#voice-toast` แสดง transcript + `✓` (match) / `~` (ไม่ match) 2 วินาที แล้วหาย
+- **Mic button:** inject เข้า `.topnav__right` ก่อน `.avatar` ใน `initVoice()` — ไม่แก้ `topNav()` signature
+- **⚠️ network error:** Web Speech API ส่งเสียงไป `speech.googleapis.com` — ถ้าขึ้น `[Voice] error: network` ใน console = Chrome ต่อ Google STT ไม่ได้ (ไม่ใช่ bug โค้ด); debug ด้วย `console.log` ใน `onresult` ตรวจว่า interim/final ขึ้นหรือเปล่า
