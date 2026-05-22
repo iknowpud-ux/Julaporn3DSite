@@ -166,6 +166,46 @@ function toggleDetail(refs: Refs): void {
   else openDetail(refs);
 }
 
+// ---------- voice listening indicator ----------
+// Voice modal — Google-style speech input popup
+// สร้างครั้งเดียว, แสดง/ซ่อนด้วย class, อัปเดต transcript สดๆ ขณะพูด
+function getVoiceModal(): { modal: HTMLElement; textEl: HTMLElement } {
+  let modal = document.getElementById('voice-modal');
+  if (modal) {
+    return { modal, textEl: modal.querySelector('.voice-modal__text')! };
+  }
+
+  const dot    = el('span', { className: 'voice-modal__dot' });
+  const label  = el('span', {}, 'กำลังฟังเสียง');
+  const header = el('div',  { className: 'voice-modal__header' }, dot, label);
+  const textEl = el('div',  { className: 'voice-modal__text voice-modal__text--placeholder' }, 'พูดเลย...');
+  const hint   = el('div',  { className: 'voice-modal__hint' }, 'เช่น "สวัสดี"  "ไฟถนน"  "ทางเข้าหลัก"');
+  const box    = el('div',  { className: 'voice-modal__box' }, header, textEl, hint);
+
+  modal = el('div', { id: 'voice-modal', className: 'voice-modal' }, box);
+  document.body.appendChild(modal);
+  return { modal, textEl };
+}
+
+function showListeningIndicator(active: boolean, interimText?: string): void {
+  const { modal, textEl } = getVoiceModal();
+  modal.classList.toggle('voice-modal--show', active);
+
+  if (!active) {
+    textEl.textContent = 'พูดเลย...';
+    textEl.classList.add('voice-modal__text--placeholder');
+    return;
+  }
+
+  if (interimText) {
+    textEl.textContent = interimText;
+    textEl.classList.remove('voice-modal__text--placeholder');
+  } else {
+    textEl.textContent = 'พูดเลย...';
+    textEl.classList.add('voice-modal__text--placeholder');
+  }
+}
+
 // ---------- voice toast ----------
 // แสดง feedback สั้นๆ ว่า mic ได้ยินอะไร (auto-hide หลัง 2 วินาที)
 let _toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -214,6 +254,9 @@ function findItemByKeyword(transcript: string): AssetData | null {
 function handleVoiceCommand(refs: Refs, cmd: VoiceCommand, transcript: string): void {
   showVoiceToast(transcript, true);
   switch (cmd.type) {
+    case 'greeting':
+      alert(`🎤 Voice command ทำงานปกติ!\nได้ยิน: "${transcript}"`);
+      break;
     case 'category':
       onSidebarClick(refs, cmd.value);
       break;
@@ -301,19 +344,17 @@ function initVoice(refs: Refs, nav: HTMLElement): void {
       handleVoiceCommand(refs, cmd, transcript);
     },
     onUnrecognized(transcript) {
-      // ไม่ match static command → ลอง keyword match กับ card ในหมวดปัจจุบัน
       const item = findItemByKeyword(transcript);
-      if (item) {
-        select(refs, item.id, true);
-        showVoiceToast(transcript, true);
-        return;
-      }
-      // mic ได้ยินแต่ match ไม่ได้เลย — toast แจ้ง user
+      if (item) { select(refs, item.id, true); showVoiceToast(transcript, true); return; }
       showVoiceToast(transcript, false);
+    },
+    onInterim(transcript) {
+      showListeningIndicator(true, transcript || undefined);
     },
     onListening(active) {
       micBtn.classList.toggle('mic-btn--listening', active);
       micBtn.setAttribute('aria-pressed', String(active));
+      showListeningIndicator(active);
     },
     onPermissionDenied() {
       micBtn.title = 'Microphone permission denied';
