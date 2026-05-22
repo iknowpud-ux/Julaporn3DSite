@@ -69,11 +69,9 @@ export function createVoice(cb: VoiceCallbacks): { toggle: () => void; listening
   rec.onresult = (e: SpeechRecognitionEvent) => {
     const last = e.results[e.results.length - 1];
     if (!last?.isFinal) {
-      console.log('[Voice] interim:', last[0]?.transcript);
       cb.onInterim?.(last[0]?.transcript ?? '');
       return;
     }
-    console.log('[Voice] final:', last[0]?.transcript);
     cb.onInterim?.('');
     for (let i = 0; i < last.length; i++) {
       const text = last[i]?.transcript ?? '';
